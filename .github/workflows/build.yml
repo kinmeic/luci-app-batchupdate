@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.format }} package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # opkg-based OpenWrt (24.10.x and earlier) -> .ipk
+          - format: ipk
+            sdk_url: https://downloads.openwrt.org/releases/24.10.8/targets/x86/64
+            sdk_file: openwrt-sdk-24.10.8-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          # apk-based OpenWrt (25.12.x and later) -> .apk
+          - format: apk
+            sdk_url: https://downloads.openwrt.org/releases/25.12.5/targets/x86/64
+            sdk_file: openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl file flex bison gawk gettext git \
+            libncurses-dev libssl-dev python3-setuptools rsync unzip \
+            wget xz-utils zlib1g-dev zstd
+
+      - name: Download and extract OpenWrt SDK
+        run: |
+          curl -fLO "${{ matrix.sdk_url }}/${{ matrix.sdk_file }}"
+          tar xf "${{ matrix.sdk_file }}"
+          mv "$(basename "${{ matrix.sdk_file }}" .tar.zst)" sdk
+
+      - name: Build package
+        run: |
+          cd sdk
+          ln -s "$GITHUB_WORKSPACE" package/luci-app-batchupdate
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+          {
+            echo "CONFIG_PACKAGE_luci-app-batchupdate=m"
+            echo "CONFIG_PACKAGE_luci-i18n-batchupdate-zh-cn=m"
+          } >> .config
+          make defconfig
+          make package/luci-app-batchupdate/compile -j"$(nproc)" V=s
+
+      - name: Collect packages
+        run: |
+          mkdir -p dist
+          find sdk/bin/packages -type f \
+            \( -name 'luci-*batchupdate*.ipk' -o -name 'luci-*batchupdate*.apk' \) \
+            -exec cp -v {} dist/ \;
+          test -n "$(ls -A dist)"
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-batchupdate-${{ matrix.format }}
+          path: dist/
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: luci-app-batchupdate-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.ipk
+            dist/*.apk
+          generate_release_notes: true

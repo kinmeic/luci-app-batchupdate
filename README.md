@@ -1,5 +1,7 @@
 # luci-app-batchupdate
 
+[![Build and Release](https://github.com/kinmeic/luci-app-batchupdate/actions/workflows/build.yml/badge.svg)](https://github.com/kinmeic/luci-app-batchupdate/actions/workflows/build.yml)
+
 OpenWrt LuCI 应用：一键批量升级所有可更新的软件包，并支持通过黑名单跳过指定软件包。
 
 同时兼容 `opkg`（OpenWrt 23.05 及更早版本）和 `apk`（OpenWrt 24.10+ / snapshot），自动检测系统上可用的包管理器。
@@ -22,24 +24,34 @@ OpenWrt LuCI 应用：一键批量升级所有可更新的软件包，并支持�
 
 ## 安装
 
-### 方式一：用 OpenWrt SDK / buildroot 编译 ipk
+### 方式一：从 GitHub Release 下载（推荐）
+
+在 [Releases](https://github.com/kinmeic/luci-app-batchupdate/releases) 页面下载对应包管理器的安装包（包为架构无关，`all`，适用于所有设备）：
+
+```sh
+# opkg 系统（OpenWrt 24.10 及更早版本）
+opkg install luci-app-batchupdate_*.ipk
+opkg install luci-i18n-batchupdate-zh-cn_*.ipk   # 中文翻译
+
+# apk 系统（OpenWrt 25.12 及更新版本 / snapshot）
+apk add --allow-untrusted luci-app-batchupdate-*.apk
+apk add --allow-untrusted luci-i18n-batchupdate-zh-cn-*.apk   # 中文翻译
+```
+
+### 方式二：用 OpenWrt SDK / buildroot 编译
 
 ```sh
 # 将本仓库放入 buildroot 的 package 目录
 cd /path/to/openwrt
-git clone <本仓库地址> package/luci-app-batchupdate
+git clone https://github.com/kinmeic/luci-app-batchupdate.git package/luci-app-batchupdate
 
 make menuconfig   # 在 LuCI -> Applications 中选中 luci-app-batchupdate
 make package/luci-app-batchupdate/compile
 ```
 
-生成的 ipk 位于 `bin/packages/*/luci/`，拷贝到路由器上安装：
+生成的安装包位于 `bin/packages/*/luci/`，拷贝到路由器上安装。
 
-```sh
-opkg install luci-app-batchupdate_*.ipk
-```
-
-### 方式二：直接拷贝文件（手动安装）
+### 方式三：直接拷贝文件（手动安装）
 
 ```sh
 # 在路由器上执行，假设仓库文件已上传到 /tmp/luci-app-batchupdate
