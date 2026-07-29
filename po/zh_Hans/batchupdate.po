@@ -144,13 +144,5 @@ msgstr "正在准备升级…"
 msgid "Progress"
 msgstr "进度"
 
-msgid ""
-"Warning: upgrading packages on a running system may cause instability or "
-"even soft-brick the device. Use with caution and make sure there is enough "
-"free flash space."
-msgstr ""
-"警告：在运行中的系统上升级软件包可能导致系统不稳定甚至变砖。请谨慎操"
-"作，并确保闪存剩余空间充足。"
-
 msgid "blacklisted"
 msgstr "已拉黑"

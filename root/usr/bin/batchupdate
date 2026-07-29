@@ -318,21 +318,36 @@ cmd_blacklist() {
 				return 1
 			fi
 			if ! uci -q get batchupdate.main >/dev/null 2>&1; then
-				uci set batchupdate.main=main
+				if ! uci -q set batchupdate.main=main; then
+					echo '{"error":"failed to initialize blacklist configuration"}'
+					return 1
+				fi
 			fi
 			load_blacklist
 			if ! is_blacklisted "$2"; then
-				uci add_list batchupdate.main.blacklist="$2"
+				if ! uci -q add_list batchupdate.main.blacklist="$2"; then
+					uci -q revert batchupdate
+					echo '{"error":"failed to save blacklist"}'
+					return 1
+				fi
 			fi
-			uci commit batchupdate
+			if ! uci -q commit batchupdate; then
+				uci -q revert batchupdate
+				echo '{"error":"failed to commit blacklist configuration"}'
+				return 1
+			fi
 			;;
 		del)
 			if ! valid_name "${2:-}"; then
 				echo '{"error":"invalid package name"}'
 				return 1
 			fi
-			uci del_list batchupdate.main.blacklist="$2" 2>/dev/null
-			uci commit batchupdate
+			uci -q del_list batchupdate.main.blacklist="$2" 2>/dev/null || true
+			if ! uci -q commit batchupdate; then
+				uci -q revert batchupdate
+				echo '{"error":"failed to commit blacklist configuration"}'
+				return 1
+			fi
 			;;
 		list)
 			;;

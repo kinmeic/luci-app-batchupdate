@@ -142,11 +142,5 @@ msgstr ""
 msgid "Progress"
 msgstr ""
 
-msgid ""
-"Warning: upgrading packages on a running system may cause instability or "
-"even soft-brick the device. Use with caution and make sure there is enough "
-"free flash space."
-msgstr ""
-
 msgid "blacklisted"
 msgstr ""

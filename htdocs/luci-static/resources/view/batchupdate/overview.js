@@ -118,8 +118,6 @@ return view.extend({
 			E('h2', _('Batch Package Update')),
 			E('div', { 'class': 'cbi-section-descr' },
 				_('Upgrade all upgradable packages at once. Packages on the blacklist are always skipped.')),
-			E('div', { 'class': 'alert-message warning' },
-				_('Warning: upgrading packages on a running system may cause instability or even soft-brick the device. Use with caution and make sure there is enough free flash space.')),
 			E('ul', { 'class': 'cbi-tabmenu' }, [
 				this.upgradesTabLink,
 				this.blacklistTabLink
@@ -457,12 +455,21 @@ return view.extend({
 				callBackend('status'),
 				callBackend('log')
 			]).then(L.bind(function(res) {
-				this.updateStatus(res[0]);
+				var st = res[0];
+				var operation = st.operation || this.activeTask;
+
+				this.updateStatus(st);
 				this.updateLog(res[1]);
 
-				if (!this.isBusy(res[0])) {
+				if (!this.isBusy(st)) {
 					poll.stop();
 					this.activeTask = null;
+
+					if (operation === 'refresh' && st.status === 'idle') {
+						this.updateLog('');
+						this.logEl.style.display = 'none';
+					}
+
 					return this.refreshPackages();
 				}
 			}, this)).catch(L.bind(function(err) {

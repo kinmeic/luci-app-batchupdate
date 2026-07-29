@@ -13,6 +13,10 @@ LUCI_PKGARCH:=all
 
 PKG_LICENSE:=MIT
 
+define Package/luci-app-batchupdate/conffiles
+/etc/config/batchupdate
+endef
+
 include $(TOPDIR)/feeds/luci/luci.mk
 
 # call BuildPackage - OpenWrt buildroot signature
