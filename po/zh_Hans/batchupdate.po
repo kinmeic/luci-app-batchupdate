@@ -28,6 +28,12 @@ msgstr "黑名单"
 msgid "Cancel"
 msgstr "取消"
 
+msgid "Close"
+msgstr "关闭"
+
+msgid "Connection interrupted; retrying…"
+msgstr "连接暂时中断，正在重试…"
+
 msgid "Confirm batch upgrade"
 msgstr "确认批量升级"
 
@@ -55,6 +61,9 @@ msgstr "未在此系统上找到受支持的包管理器（opkg 或 apk）。"
 msgid "No upgradable packages found."
 msgstr "没有可更新的软件包。"
 
+msgid "None"
+msgstr "无"
+
 msgid "OK"
 msgstr "确定"
 
@@ -67,6 +76,9 @@ msgstr "软件包名称"
 msgid "Package upgrades"
 msgstr "软件包升级"
 
+msgid "Package upgrade progress"
+msgstr "软件包升级进度"
+
 msgid ""
 "Packages on the blacklist are never upgraded, neither by one-click batch "
 "upgrades nor by single package upgrades."
@@ -77,6 +89,9 @@ msgstr ""
 msgid "Refresh package list"
 msgstr "刷新软件包列表"
 
+msgid "Refreshing package list…"
+msgstr "正在刷新软件包列表…"
+
 msgid "Refreshing"
 msgstr "正在刷新"
 
@@ -85,6 +100,9 @@ msgstr "移出黑名单"
 
 msgid "Status"
 msgstr "状态"
+
+msgid "Starting"
+msgstr "正在启动"
 
 msgid ""
 "The backend helper is unavailable. Please check that /usr/bin/batchupdate "
@@ -119,6 +137,12 @@ msgstr "已升级：%d，失败：%d，跳过：%d"
 
 msgid "Upgrading"
 msgstr "升级中"
+
+msgid "Preparing upgrade…"
+msgstr "正在准备升级…"
+
+msgid "Progress"
+msgstr "进度"
 
 msgid ""
 "Warning: upgrading packages on a running system may cause instability or "

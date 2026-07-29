@@ -6,6 +6,7 @@
 'require dom';
 
 var BACKEND = '/usr/bin/batchupdate';
+var POLL_INTERVAL = 2;
 
 function callBackend(action, args) {
 	return fs.exec(BACKEND, [ action ].concat(args || [])).then(function(res) {
@@ -50,6 +51,9 @@ return view.extend({
 	},
 
 	render: function(data) {
+		this.activeTab = 'upgrades';
+		this.activeTask = null;
+		this.expectedTotal = 0;
 		this.statusEl = E('div', { 'style': 'margin:.5em 0' });
 		this.pkgEl = E('div', { 'style': 'margin-top:1em' });
 		this.blEl = E('div', { 'style': 'margin-top:1em' });
@@ -74,39 +78,54 @@ return view.extend({
 			'click': L.bind(this.handleUpgradeAll, this)
 		}, [ _('Upgrade all packages') ]);
 
+		this.upgradesTab = E('div', { 'class': 'cbi-section' }, [
+			this.statusEl,
+			E('div', {}, [
+				this.refreshBtn,
+				' ',
+				this.upgradeAllBtn
+			]),
+			this.pkgEl,
+			this.logEl
+		]);
+		this.blacklistTab = E('div', {
+			'class': 'cbi-section',
+			'style': 'display:none'
+		}, [
+			E('div', { 'class': 'cbi-section-descr' },
+				_('Packages on the blacklist are never upgraded, neither by one-click batch upgrades nor by single package upgrades.')),
+			E('div', {}, [
+				this.blInput,
+				' ',
+				E('button', {
+					'class': 'btn cbi-button cbi-button-add',
+					'click': L.bind(this.handleBlacklistAdd, this)
+				}, [ _('Add') ])
+			]),
+			this.blEl
+		]);
+
+		this.upgradesTabLink = this.makeTabLink('upgrades', _('Package upgrades'));
+		this.blacklistTabLink = this.makeTabLink('blacklist', _('Blacklist'));
+
 		var v = E('div', {}, [
+			E('style', {}, [
+				'@keyframes batchupdate-spin{to{transform:rotate(360deg)}}',
+				'.batchupdate-spinner{display:inline-block;margin-right:.45em;animation:batchupdate-spin .8s linear infinite}',
+				'.batchupdate-progress{width:100%;height:1.1em}',
+				'.batchupdate-modal-log{max-height:16em;overflow:auto;margin-top:1em;padding:.5em;white-space:pre-wrap}'
+			].join('')),
 			E('h2', _('Batch Package Update')),
 			E('div', { 'class': 'cbi-section-descr' },
 				_('Upgrade all upgradable packages at once. Packages on the blacklist are always skipped.')),
 			E('div', { 'class': 'alert-message warning' },
 				_('Warning: upgrading packages on a running system may cause instability or even soft-brick the device. Use with caution and make sure there is enough free flash space.')),
-
-			E('div', { 'class': 'cbi-section' }, [
-				E('h3', _('Package upgrades')),
-				this.statusEl,
-				E('div', {}, [
-					this.refreshBtn,
-					' ',
-					this.upgradeAllBtn
-				]),
-				this.pkgEl,
-				this.logEl
+			E('ul', { 'class': 'cbi-tabmenu' }, [
+				this.upgradesTabLink,
+				this.blacklistTabLink
 			]),
-
-			E('div', { 'class': 'cbi-section' }, [
-				E('h3', _('Blacklist')),
-				E('div', { 'class': 'cbi-section-descr' },
-					_('Packages on the blacklist are never upgraded, neither by one-click batch upgrades nor by single package upgrades.')),
-				E('div', {}, [
-					this.blInput,
-					' ',
-					E('button', {
-						'class': 'btn cbi-button cbi-button-add',
-						'click': L.bind(this.handleBlacklistAdd, this)
-					}, [ _('Add') ])
-				]),
-				this.blEl
-			])
+			this.upgradesTab,
+			this.blacklistTab
 		]);
 
 		var status = data[0] || { status: 'idle', ok: 0, failed: 0, skipped: 0 };
@@ -115,8 +134,14 @@ return view.extend({
 		this.renderPackages(data[1]);
 		this.renderBlacklist(data[2] || []);
 
-		if (status.status === 'running' || status.status === 'refreshing') {
+		if (this.isBusy(status)) {
+			this.activeTask = status.operation ||
+				(status.status === 'refreshing' ? 'refresh' : 'upgrade');
 			this.logEl.style.display = '';
+			if (this.activeTask === 'upgrade')
+				this.showProgressModal(status);
+			else
+				this.setRefreshLoading(true);
 			this.startPolling();
 		}
 
@@ -127,9 +152,35 @@ return view.extend({
 		ui.addNotification(null, E('p', err.message || String(err)), 'error');
 	},
 
+	makeTabLink: function(name, label) {
+		return E('li', {
+			'class': name === 'upgrades' ? 'cbi-tab' : 'cbi-tab-disabled'
+		}, E('a', {
+			'href': '#',
+			'click': L.bind(function(ev) {
+				ev.preventDefault();
+				this.switchTab(name);
+			}, this)
+		}, label));
+	},
+
+	switchTab: function(name) {
+		this.activeTab = name;
+		this.upgradesTab.style.display = name === 'upgrades' ? '' : 'none';
+		this.blacklistTab.style.display = name === 'blacklist' ? '' : 'none';
+		this.upgradesTabLink.className = name === 'upgrades' ? 'cbi-tab' : 'cbi-tab-disabled';
+		this.blacklistTabLink.className = name === 'blacklist' ? 'cbi-tab' : 'cbi-tab-disabled';
+	},
+
+	isBusy: function(st) {
+		return st && (st.status === 'starting' ||
+			st.status === 'running' || st.status === 'refreshing');
+	},
+
 	updateStatus: function(st) {
 		var label = {
 			'idle':       _('Idle'),
+			'starting':   _('Starting'),
 			'refreshing': _('Refreshing'),
 			'running':    _('Upgrading'),
 			'done':       _('Finished'),
@@ -149,9 +200,81 @@ return view.extend({
 			'style': st.status === 'failed' ? 'color:#c00;font-weight:bold' : 'font-weight:bold'
 		}, text));
 
-		var busy = (st.status === 'running' || st.status === 'refreshing');
+		var busy = this.isBusy(st);
 		this.refreshBtn.disabled = busy;
 		this.upgradeAllBtn.disabled = busy;
+
+		if (st.operation === 'refresh' || this.activeTask === 'refresh')
+			this.setRefreshLoading(busy);
+
+		if ((st.operation === 'upgrade' || this.activeTask === 'upgrade') &&
+		    this.progressCurrentEl)
+			this.updateProgressModal(st);
+	},
+
+	setRefreshLoading: function(loading) {
+		dom.content(this.refreshBtn, loading ? [
+			E('span', { 'class': 'batchupdate-spinner', 'aria-hidden': 'true' }, '↻'),
+			_('Refreshing package list…')
+		] : [ _('Refresh package list') ]);
+	},
+
+	showProgressModal: function(st) {
+		this.progressCurrentEl = E('strong', {}, _('Preparing upgrade…'));
+		this.progressCountEl = E('span', {}, '0 / ' + (this.expectedTotal || st.total || 0));
+		this.progressBarEl = E('progress', {
+			'class': 'batchupdate-progress',
+			'max': Math.max(this.expectedTotal || st.total || 1, 1),
+			'value': st.completed || 0
+		});
+		this.progressResultEl = E('div', { 'style': 'margin-top:.75em' });
+		this.progressLogEl = E('pre', { 'class': 'batchupdate-modal-log' });
+		this.progressCloseBtn = E('button', {
+			'class': 'btn',
+			'disabled': true,
+			'click': ui.hideModal
+		}, [ _('Close') ]);
+
+		ui.showModal(_('Package upgrade progress'), [
+			E('p', {}, [
+				_('Currently upgrading') + ': ',
+				this.progressCurrentEl
+			]),
+			E('div', { 'style': 'display:flex;justify-content:space-between;margin-bottom:.35em' }, [
+				E('span', {}, _('Progress')),
+				this.progressCountEl
+			]),
+			this.progressBarEl,
+			this.progressResultEl,
+			this.progressLogEl,
+			E('div', { 'class': 'right', 'style': 'margin-top:1em' }, [
+				this.progressCloseBtn
+			])
+		]);
+
+		this.updateProgressModal(st);
+	},
+
+	updateProgressModal: function(st) {
+		var total = st.total || this.expectedTotal || 0;
+		var completed = st.completed || 0;
+		var current = st.current || (this.isBusy(st) ? _('Preparing upgrade…') : _('None'));
+
+		if (total)
+			completed = Math.min(completed, total);
+
+		dom.content(this.progressCurrentEl, current);
+		dom.content(this.progressCountEl, completed + ' / ' + total);
+		this.progressBarEl.max = Math.max(total, 1);
+		this.progressBarEl.value = completed;
+
+		if (!this.isBusy(st)) {
+			dom.content(this.progressResultEl, E('strong', {
+				'style': st.status === 'failed' ? 'color:#c00' : ''
+			}, _('Upgraded: %d, failed: %d, skipped: %d')
+				.format(st.ok || 0, st.failed || 0, st.skipped || 0)));
+			this.progressCloseBtn.disabled = false;
+		}
 	},
 
 	renderPackages: function(list) {
@@ -250,17 +373,18 @@ return view.extend({
 	},
 
 	handleRefresh: function() {
+		this.activeTask = 'refresh';
 		this.refreshBtn.disabled = true;
 		this.upgradeAllBtn.disabled = true;
+		this.setRefreshLoading(true);
+		this.updateStatus({ status: 'starting', operation: 'refresh' });
+		this.logEl.style.display = '';
+		this.logEl.textContent = '';
 
 		return callBackend('refresh').then(L.bind(function() {
-			this.updateStatus({ status: 'refreshing' });
-			this.logEl.style.display = '';
-			this.logEl.textContent = '';
 			this.startPolling();
 		}, this)).catch(L.bind(function(err) {
-			this.reportError(err);
-			this.updateStatus({ status: 'idle' });
+			return this.recoverLaunch(err, 'refresh');
 		}, this));
 	},
 
@@ -275,21 +399,50 @@ return view.extend({
 
 		confirmDialog(_('Confirm batch upgrade'),
 			_('This will upgrade %d packages. Blacklisted packages are skipped. Continue?').format(todo.length),
-			L.bind(function() { this.startUpgrade([]); }, this));
+			L.bind(function() { this.startUpgrade([], todo.length); }, this));
 	},
 
 	handleUpgradeOne: function(name) {
 		confirmDialog(_('Confirm upgrade'),
 			_('Upgrade package "%s"?').format(name),
-			L.bind(function() { this.startUpgrade([ name ]); }, this));
+			L.bind(function() { this.startUpgrade([ name ], 1); }, this));
 	},
 
-	startUpgrade: function(pkgs) {
+	startUpgrade: function(pkgs, expectedTotal) {
+		this.activeTask = 'upgrade';
+		this.expectedTotal = expectedTotal || 0;
+		var starting = {
+			status: 'starting',
+			operation: 'upgrade',
+			completed: 0,
+			total: this.expectedTotal
+		};
+
+		this.updateStatus(starting);
+		this.showProgressModal(starting);
+		this.logEl.style.display = '';
+		this.logEl.textContent = '';
+
 		return callBackend('start', pkgs).then(L.bind(function() {
-			this.logEl.style.display = '';
-			this.logEl.textContent = '';
 			this.startPolling();
-		}, this)).catch(L.bind(this.reportError, this));
+		}, this)).catch(L.bind(function(err) {
+			return this.recoverLaunch(err, 'upgrade');
+		}, this));
+	},
+
+	recoverLaunch: function(err, operation) {
+		return callBackend('status').then(L.bind(function(st) {
+			if (this.isBusy(st) && (!st.operation || st.operation === operation)) {
+				this.startPolling();
+				return;
+			}
+
+			this.updateStatus(st);
+			this.reportError(err);
+		}, this)).catch(L.bind(function() {
+			this.updateStatus({ status: 'failed', operation: operation });
+			this.reportError(err);
+		}, this));
 	},
 
 	startPolling: function() {
@@ -307,17 +460,28 @@ return view.extend({
 				this.updateStatus(res[0]);
 				this.updateLog(res[1]);
 
-				if (res[0].status !== 'running' && res[0].status !== 'refreshing') {
+				if (!this.isBusy(res[0])) {
 					poll.stop();
-					this.refreshPackages();
+					this.activeTask = null;
+					return this.refreshPackages();
 				}
+			}, this)).catch(L.bind(function(err) {
+				if (this.progressResultEl)
+					dom.content(this.progressResultEl,
+						E('span', { 'style': 'color:#c00' },
+							_('Connection interrupted; retrying…')));
+				return Promise.resolve(err);
 			}, this));
-		}, this), 3);
+		}, this), POLL_INTERVAL);
 	},
 
 	updateLog: function(text) {
 		this.logEl.textContent = text || '';
 		this.logEl.scrollTop = this.logEl.scrollHeight;
+		if (this.progressLogEl) {
+			this.progressLogEl.textContent = text || '';
+			this.progressLogEl.scrollTop = this.progressLogEl.scrollHeight;
+		}
 	},
 
 	handleBlacklistAdd: function() {

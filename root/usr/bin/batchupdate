@@ -45,6 +45,14 @@ valid_name() {
 	return 0
 }
 
+write_state() {
+	local state="$1" current="${2:-}" total="${3:-0}" operation="${4:-}"
+	local tmp="$STATEFILE.$$"
+
+	printf '%s\n%s\n%s\n%s\n' "$state" "$current" "$total" "$operation" > "$tmp"
+	mv "$tmp" "$STATEFILE"
+}
+
 pkg_manager() {
 	if command -v opkg >/dev/null 2>&1; then
 		echo "opkg"
@@ -120,17 +128,20 @@ cmd_list() {
 }
 
 cmd_status() {
-	local state="idle" cur="" ok=0 fail=0 skip=0 pid
+	local state="idle" cur="" total=0 operation="" ok=0 fail=0 skip=0 pid completed
 
 	if [ -f "$STATEFILE" ]; then
 		state=$(sed -n '1p' "$STATEFILE")
 		cur=$(sed -n '2p' "$STATEFILE")
+		total=$(sed -n '3p' "$STATEFILE")
+		operation=$(sed -n '4p' "$STATEFILE")
 	fi
 
 	if [ "$state" = "running" ] || [ "$state" = "refreshing" ]; then
 		pid=$(cat "$PIDFILE" 2>/dev/null)
 		if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
 			state="failed"
+			write_state "$state" "$cur" "$total" "$operation"
 		fi
 	fi
 
@@ -140,8 +151,14 @@ cmd_status() {
 		skip=$(grep -c '^skip ' "$RESULTFILE" 2>/dev/null)
 	fi
 
-	printf '{"status":"%s","current":"%s","ok":%s,"failed":%s,"skipped":%s}\n' \
-		"$state" "$cur" "${ok:-0}" "${fail:-0}" "${skip:-0}"
+	case "$total" in
+		''|*[!0-9]*) total=0 ;;
+	esac
+	completed=$((ok + fail))
+
+	printf '{"status":"%s","operation":"%s","current":"%s","completed":%s,"total":%s,"ok":%s,"failed":%s,"skipped":%s}\n' \
+		"$state" "$operation" "$cur" "$completed" "$total" \
+		"${ok:-0}" "${fail:-0}" "${skip:-0}"
 }
 
 cmd_update() {
@@ -159,6 +176,8 @@ cmd_update() {
 }
 
 cmd_start() {
+	local operation="upgrade" rc
+
 	mkdir -p "$WORKDIR"
 
 	if [ -d "$LOCKDIR" ]; then
@@ -171,15 +190,38 @@ cmd_start() {
 		rm -rf "$LOCKDIR"
 	fi
 
-	# detached worker; fds redirected so the ubus exec call returns at once
-	"$SELF" run "$@" </dev/null >/dev/null 2>&1 &
+	[ "${1:-}" = "--refresh-only" ] && operation="refresh"
+	if [ "$operation" = "upgrade" ]; then
+		: > "$RESULTFILE"
+		: > "$LOGFILE"
+	fi
+	write_state "starting" "" 0 "$operation"
+
+	# Use BusyBox start-stop-daemon when available so rpcd's file.exec request
+	# never remains attached to a long-running package manager process.
+	if command -v start-stop-daemon >/dev/null 2>&1; then
+		start-stop-daemon -S -b -x "$SELF" -- run "$@" \
+			</dev/null >/dev/null 2>&1
+		rc=$?
+	else
+		( "$SELF" run "$@" </dev/null >/dev/null 2>&1 & )
+		rc=$?
+	fi
+
+	if [ "$rc" -ne 0 ]; then
+		write_state "failed" "" 0 "$operation"
+		echo '{"error":"failed to start background worker"}'
+		return 1
+	fi
+
 	echo '{"status":"started"}'
 }
 
 cmd_run() {
-	local refresh_only=0
+	local refresh_only=0 operation="upgrade"
 	if [ "${1:-}" = "--refresh-only" ]; then
 		refresh_only=1
+		operation="refresh"
 		shift
 	fi
 
@@ -189,9 +231,9 @@ cmd_run() {
 
 	echo $$ > "$PIDFILE"
 	if [ "$refresh_only" = "1" ]; then
-		printf 'refreshing\n\n' > "$STATEFILE"
+		write_state "refreshing" "" 0 "refresh"
 	else
-		printf 'running\n\n' > "$STATEFILE"
+		write_state "running" "" 0 "upgrade"
 	fi
 	: > "$LOGFILE"
 	[ "$refresh_only" = "1" ] || : > "$RESULTFILE"
@@ -200,7 +242,7 @@ cmd_run() {
 	pm=$(pkg_manager)
 	if [ -z "$pm" ]; then
 		echo "No supported package manager (opkg or apk) found." >> "$LOGFILE"
-		printf 'failed\n\n' > "$STATEFILE"
+		write_state "failed" "" 0 "$operation"
 		exit 1
 	fi
 	echo "Package manager: $pm" >> "$LOGFILE"
@@ -210,13 +252,13 @@ cmd_run() {
 	echo "Refreshing package lists ..." >> "$LOGFILE"
 	if ! do_update "$pm" >> "$LOGFILE" 2>&1; then
 		echo "ERROR: package list refresh failed." >> "$LOGFILE"
-		printf 'failed\n\n' > "$STATEFILE"
+		write_state "failed" "" 0 "$operation"
 		exit 1
 	fi
 
 	if [ "$refresh_only" = "1" ]; then
 		echo "Package lists refreshed." >> "$LOGFILE"
-		printf 'idle\n\n' > "$STATEFILE"
+		write_state "idle" "" 0 "refresh"
 		exit 0
 	fi
 
@@ -227,26 +269,29 @@ cmd_run() {
 		targets=$(list_upgradable "$pm" | cut -f1)
 	fi
 
-	local upgrade_list="" p rc=0
+	local upgrade_list="" p rc=0 total=0
 	for p in $targets; do
 		if is_blacklisted "$p"; then
 			echo "skip $p" >> "$RESULTFILE"
 			echo "Skipping blacklisted package: $p" >> "$LOGFILE"
 		else
 			upgrade_list="$upgrade_list $p"
+			total=$((total + 1))
 		fi
 	done
 
+	write_state "running" "" "$total" "upgrade"
+
 	if [ -z "$upgrade_list" ]; then
 		echo "Nothing to upgrade." >> "$LOGFILE"
-		printf 'done\n\n' > "$STATEFILE"
+		write_state "done" "" "$total" "upgrade"
 		exit 0
 	fi
 
 	for p in $upgrade_list; do
 		echo "" >> "$LOGFILE"
 		echo "=== Upgrading $p ===" >> "$LOGFILE"
-		printf 'running\n%s\n' "$p" > "$STATEFILE"
+		write_state "running" "$p" "$total" "upgrade"
 		if upgrade_one "$pm" "$p" >> "$LOGFILE" 2>&1; then
 			echo "ok $p" >> "$RESULTFILE"
 		else
@@ -258,10 +303,10 @@ cmd_run() {
 	echo "" >> "$LOGFILE"
 	if [ "$rc" -eq 0 ]; then
 		echo "All upgrades finished successfully." >> "$LOGFILE"
-		printf 'done\n\n' > "$STATEFILE"
+		write_state "done" "" "$total" "upgrade"
 	else
 		echo "Finished with errors, see log above." >> "$LOGFILE"
-		printf 'failed\n\n' > "$STATEFILE"
+		write_state "failed" "" "$total" "upgrade"
 	fi
 }
 
