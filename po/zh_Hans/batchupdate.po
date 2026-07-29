@@ -1,0 +1,132 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Add"
+msgstr "添加"
+
+msgid "Add to blacklist"
+msgstr "加入黑名单"
+
+msgid "Available version"
+msgstr "可更新版本"
+
+msgid "Backend call failed"
+msgstr "后端调用失败"
+
+msgid "Batch Package Update"
+msgstr "批量软件包更新"
+
+msgid "Batch Update"
+msgstr "批量更新"
+
+msgid "Blacklist"
+msgstr "黑名单"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Confirm batch upgrade"
+msgstr "确认批量升级"
+
+msgid "Confirm upgrade"
+msgstr "确认升级"
+
+msgid "Currently upgrading"
+msgstr "正在升级"
+
+msgid "Failed"
+msgstr "失败"
+
+msgid "Finished"
+msgstr "已完成"
+
+msgid "Idle"
+msgstr "空闲"
+
+msgid "Installed version"
+msgstr "当前版本"
+
+msgid "No supported package manager (opkg or apk) was found on this system."
+msgstr "未在此系统上找到受支持的包管理器（opkg 或 apk）。"
+
+msgid "No upgradable packages found."
+msgstr "没有可更新的软件包。"
+
+msgid "OK"
+msgstr "确定"
+
+msgid "Package"
+msgstr "软件包"
+
+msgid "Package name"
+msgstr "软件包名称"
+
+msgid "Package upgrades"
+msgstr "软件包升级"
+
+msgid ""
+"Packages on the blacklist are never upgraded, neither by one-click batch "
+"upgrades nor by single package upgrades."
+msgstr ""
+"黑名单中的软件包永远不会被升级：无论是一键批量升级还是单独升级都会被"
+"跳过。"
+
+msgid "Refresh package list"
+msgstr "刷新软件包列表"
+
+msgid "Refreshing"
+msgstr "正在刷新"
+
+msgid "Remove from blacklist"
+msgstr "移出黑名单"
+
+msgid "Status"
+msgstr "状态"
+
+msgid ""
+"The backend helper is unavailable. Please check that /usr/bin/batchupdate "
+"is installed and executable."
+msgstr "后端脚本不可用。请检查 /usr/bin/batchupdate 是否已安装且具有可执行权限。"
+
+msgid "The blacklist is empty."
+msgstr "黑名单为空。"
+
+msgid "There is nothing to upgrade."
+msgstr "没有需要升级的软件包。"
+
+msgid "This will upgrade %d packages. Blacklisted packages are skipped. Continue?"
+msgstr "即将升级 %d 个软件包，黑名单中的软件包会被跳过。是否继续？"
+
+msgid "Upgrade"
+msgstr "升级"
+
+msgid "Upgrade all packages"
+msgstr "一键升级全部"
+
+msgid ""
+"Upgrade all upgradable packages at once. Packages on the blacklist are "
+"always skipped."
+msgstr "一键升级所有可更新的软件包。黑名单中的软件包会被自动跳过。"
+
+msgid "Upgrade package \"%s\"?"
+msgstr "确定要升级软件包“%s”吗？"
+
+msgid "Upgraded: %d, failed: %d, skipped: %d"
+msgstr "已升级：%d，失败：%d，跳过：%d"
+
+msgid "Upgrading"
+msgstr "升级中"
+
+msgid ""
+"Warning: upgrading packages on a running system may cause instability or "
+"even soft-brick the device. Use with caution and make sure there is enough "
+"free flash space."
+msgstr ""
+"警告：在运行中的系统上升级软件包可能导致系统不稳定甚至变砖。请谨慎操"
+"作，并确保闪存剩余空间充足。"
+
+msgid "blacklisted"
+msgstr "已拉黑"

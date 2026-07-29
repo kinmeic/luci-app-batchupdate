@@ -1,0 +1,128 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Actions"
+msgstr ""
+
+msgid "Add"
+msgstr ""
+
+msgid "Add to blacklist"
+msgstr ""
+
+msgid "Available version"
+msgstr ""
+
+msgid "Backend call failed"
+msgstr ""
+
+msgid "Batch Package Update"
+msgstr ""
+
+msgid "Batch Update"
+msgstr ""
+
+msgid "Blacklist"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Confirm batch upgrade"
+msgstr ""
+
+msgid "Confirm upgrade"
+msgstr ""
+
+msgid "Currently upgrading"
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+msgid "Finished"
+msgstr ""
+
+msgid "Idle"
+msgstr ""
+
+msgid "Installed version"
+msgstr ""
+
+msgid "No supported package manager (opkg or apk) was found on this system."
+msgstr ""
+
+msgid "No upgradable packages found."
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Package"
+msgstr ""
+
+msgid "Package name"
+msgstr ""
+
+msgid "Package upgrades"
+msgstr ""
+
+msgid ""
+"Packages on the blacklist are never upgraded, neither by one-click batch "
+"upgrades nor by single package upgrades."
+msgstr ""
+
+msgid "Refresh package list"
+msgstr ""
+
+msgid "Refreshing"
+msgstr ""
+
+msgid "Remove from blacklist"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid ""
+"The backend helper is unavailable. Please check that /usr/bin/batchupdate "
+"is installed and executable."
+msgstr ""
+
+msgid "The blacklist is empty."
+msgstr ""
+
+msgid "There is nothing to upgrade."
+msgstr ""
+
+msgid "This will upgrade %d packages. Blacklisted packages are skipped. Continue?"
+msgstr ""
+
+msgid "Upgrade"
+msgstr ""
+
+msgid "Upgrade all packages"
+msgstr ""
+
+msgid ""
+"Upgrade all upgradable packages at once. Packages on the blacklist are "
+"always skipped."
+msgstr ""
+
+msgid "Upgrade package \"%s\"?"
+msgstr ""
+
+msgid "Upgraded: %d, failed: %d, skipped: %d"
+msgstr ""
+
+msgid "Upgrading"
+msgstr ""
+
+msgid ""
+"Warning: upgrading packages on a running system may cause instability or "
+"even soft-brick the device. Use with caution and make sure there is enough "
+"free flash space."
+msgstr ""
+
+msgid "blacklisted"
+msgstr ""

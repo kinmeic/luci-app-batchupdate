@@ -1,0 +1,5 @@
+
+config main 'main'
+	# Packages listed here are skipped by batch upgrades.
+	# Example:
+	# list blacklist 'kmod-ath9k'

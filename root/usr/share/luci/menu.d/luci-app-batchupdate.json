@@ -1,0 +1,13 @@
+{
+	"admin/system/batchupdate": {
+		"title": "Batch Update",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "batchupdate/overview"
+		},
+		"depends": {
+			"acl": [ "luci-app-batchupdate" ]
+		}
+	}
+}

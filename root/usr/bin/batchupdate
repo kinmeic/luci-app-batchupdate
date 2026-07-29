@@ -1,0 +1,324 @@
+#!/bin/sh
+# batchupdate - backend helper for luci-app-batchupdate
+#
+# Usage:
+#   batchupdate list                      JSON list of upgradable packages
+#   batchupdate status                    JSON state of the last/current run
+#   batchupdate log                       raw log (tail) of the last/current run
+#   batchupdate update                    refresh package lists, synchronously
+#   batchupdate refresh                   refresh package lists, in background
+#   batchupdate start [pkg ...]           background upgrade (all upgradable, or given pkgs)
+#   batchupdate blacklist [list]          JSON array of blacklisted packages
+#   batchupdate blacklist add <pkg>       add package to blacklist
+#   batchupdate blacklist del <pkg>       remove package from blacklist
+
+SELF="/usr/bin/batchupdate"
+WORKDIR="/tmp/batchupdate"
+LOCKDIR="$WORKDIR/lock"
+PIDFILE="$WORKDIR/pid"
+STATEFILE="$WORKDIR/state"
+LOGFILE="$WORKDIR/upgrade.log"
+RESULTFILE="$WORKDIR/result"
+
+. /lib/functions.sh
+
+BLACKLIST=" "
+
+load_blacklist() {
+	BLACKLIST=" "
+	_collect() { BLACKLIST="${BLACKLIST}$1 "; }
+	config_load batchupdate
+	config_list_foreach main blacklist _collect
+}
+
+is_blacklisted() {
+	case "$BLACKLIST" in
+		*" $1 "*) return 0 ;;
+	esac
+	return 1
+}
+
+valid_name() {
+	case "$1" in
+		""|*[!A-Za-z0-9._+-]*) return 1 ;;
+	esac
+	return 0
+}
+
+pkg_manager() {
+	if command -v opkg >/dev/null 2>&1; then
+		echo "opkg"
+	elif command -v apk >/dev/null 2>&1; then
+		echo "apk"
+	fi
+}
+
+do_update() {
+	case "$1" in
+		opkg) opkg update ;;
+		apk)  apk update ;;
+		*)    return 1 ;;
+	esac
+}
+
+# prints: name <TAB> current-version <TAB> new-version
+list_upgradable() {
+	case "$1" in
+		opkg)
+			opkg list-upgradable 2>/dev/null | awk '{ print $1 "\t" $3 "\t" $5 }'
+			;;
+		apk)
+			apk list --upgradable 2>/dev/null | awk '
+				match($1, /-[0-9]/) {
+					name = substr($1, 1, RSTART - 1)
+					newver = substr($1, RSTART + 1)
+					oldver = ""
+					for (i = 2; i < NF; i++) {
+						if ($i == "from:") {
+							oldver = $(i + 1)
+							sub(/\]$/, "", oldver)
+							sub("^" name "-", "", oldver)
+						}
+					}
+					print name "\t" oldver "\t" newver
+				}'
+			;;
+	esac
+}
+
+upgrade_one() {
+	local pm="$1"
+	shift
+	case "$pm" in
+		opkg) opkg upgrade "$@" ;;
+		apk)  apk upgrade "$@" ;;
+		*)    return 1 ;;
+	esac
+}
+
+cmd_list() {
+	local pm tab first=1
+	pm=$(pkg_manager)
+	tab=$(printf '\t')
+
+	load_blacklist
+
+	printf '{"manager":"%s","packages":[' "${pm:-none}"
+	list_upgradable "$pm" | while IFS="$tab" read -r name old new; do
+		[ -n "$name" ] || continue
+		if is_blacklisted "$name"; then
+			bl=true
+		else
+			bl=false
+		fi
+		[ "$first" = "0" ] && printf ','
+		first=0
+		printf '{"name":"%s","current":"%s","new":"%s","blacklisted":%s}' \
+			"$name" "$old" "$new" "$bl"
+	done
+	printf ']}\n'
+}
+
+cmd_status() {
+	local state="idle" cur="" ok=0 fail=0 skip=0 pid
+
+	if [ -f "$STATEFILE" ]; then
+		state=$(sed -n '1p' "$STATEFILE")
+		cur=$(sed -n '2p' "$STATEFILE")
+	fi
+
+	if [ "$state" = "running" ] || [ "$state" = "refreshing" ]; then
+		pid=$(cat "$PIDFILE" 2>/dev/null)
+		if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+			state="failed"
+		fi
+	fi
+
+	if [ -f "$RESULTFILE" ]; then
+		ok=$(grep -c '^ok ' "$RESULTFILE" 2>/dev/null)
+		fail=$(grep -c '^fail ' "$RESULTFILE" 2>/dev/null)
+		skip=$(grep -c '^skip ' "$RESULTFILE" 2>/dev/null)
+	fi
+
+	printf '{"status":"%s","current":"%s","ok":%s,"failed":%s,"skipped":%s}\n' \
+		"$state" "$cur" "${ok:-0}" "${fail:-0}" "${skip:-0}"
+}
+
+cmd_update() {
+	local pm
+	pm=$(pkg_manager)
+	if [ -z "$pm" ]; then
+		echo '{"error":"no supported package manager found"}'
+		return 1
+	fi
+	if ! do_update "$pm" >/dev/null 2>&1; then
+		echo '{"error":"package list refresh failed"}'
+		return 1
+	fi
+	echo '{"status":"ok"}'
+}
+
+cmd_start() {
+	mkdir -p "$WORKDIR"
+
+	if [ -d "$LOCKDIR" ]; then
+		local pid
+		pid=$(cat "$PIDFILE" 2>/dev/null)
+		if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+			echo '{"status":"already-running"}'
+			return 0
+		fi
+		rm -rf "$LOCKDIR"
+	fi
+
+	# detached worker; fds redirected so the ubus exec call returns at once
+	"$SELF" run "$@" </dev/null >/dev/null 2>&1 &
+	echo '{"status":"started"}'
+}
+
+cmd_run() {
+	local refresh_only=0
+	if [ "${1:-}" = "--refresh-only" ]; then
+		refresh_only=1
+		shift
+	fi
+
+	mkdir -p "$WORKDIR"
+	mkdir "$LOCKDIR" 2>/dev/null || exit 0
+	trap 'rm -rf "$LOCKDIR"' EXIT
+
+	echo $$ > "$PIDFILE"
+	if [ "$refresh_only" = "1" ]; then
+		printf 'refreshing\n\n' > "$STATEFILE"
+	else
+		printf 'running\n\n' > "$STATEFILE"
+	fi
+	: > "$LOGFILE"
+	[ "$refresh_only" = "1" ] || : > "$RESULTFILE"
+
+	local pm
+	pm=$(pkg_manager)
+	if [ -z "$pm" ]; then
+		echo "No supported package manager (opkg or apk) found." >> "$LOGFILE"
+		printf 'failed\n\n' > "$STATEFILE"
+		exit 1
+	fi
+	echo "Package manager: $pm" >> "$LOGFILE"
+
+	load_blacklist
+
+	echo "Refreshing package lists ..." >> "$LOGFILE"
+	if ! do_update "$pm" >> "$LOGFILE" 2>&1; then
+		echo "ERROR: package list refresh failed." >> "$LOGFILE"
+		printf 'failed\n\n' > "$STATEFILE"
+		exit 1
+	fi
+
+	if [ "$refresh_only" = "1" ]; then
+		echo "Package lists refreshed." >> "$LOGFILE"
+		printf 'idle\n\n' > "$STATEFILE"
+		exit 0
+	fi
+
+	local targets
+	if [ "$#" -gt 0 ]; then
+		targets="$*"
+	else
+		targets=$(list_upgradable "$pm" | cut -f1)
+	fi
+
+	local upgrade_list="" p rc=0
+	for p in $targets; do
+		if is_blacklisted "$p"; then
+			echo "skip $p" >> "$RESULTFILE"
+			echo "Skipping blacklisted package: $p" >> "$LOGFILE"
+		else
+			upgrade_list="$upgrade_list $p"
+		fi
+	done
+
+	if [ -z "$upgrade_list" ]; then
+		echo "Nothing to upgrade." >> "$LOGFILE"
+		printf 'done\n\n' > "$STATEFILE"
+		exit 0
+	fi
+
+	for p in $upgrade_list; do
+		echo "" >> "$LOGFILE"
+		echo "=== Upgrading $p ===" >> "$LOGFILE"
+		printf 'running\n%s\n' "$p" > "$STATEFILE"
+		if upgrade_one "$pm" "$p" >> "$LOGFILE" 2>&1; then
+			echo "ok $p" >> "$RESULTFILE"
+		else
+			echo "fail $p" >> "$RESULTFILE"
+			rc=1
+		fi
+	done
+
+	echo "" >> "$LOGFILE"
+	if [ "$rc" -eq 0 ]; then
+		echo "All upgrades finished successfully." >> "$LOGFILE"
+		printf 'done\n\n' > "$STATEFILE"
+	else
+		echo "Finished with errors, see log above." >> "$LOGFILE"
+		printf 'failed\n\n' > "$STATEFILE"
+	fi
+}
+
+cmd_blacklist() {
+	case "${1:-list}" in
+		add)
+			if ! valid_name "${2:-}"; then
+				echo '{"error":"invalid package name"}'
+				return 1
+			fi
+			if ! uci -q get batchupdate.main >/dev/null 2>&1; then
+				uci set batchupdate.main=main
+			fi
+			load_blacklist
+			if ! is_blacklisted "$2"; then
+				uci add_list batchupdate.main.blacklist="$2"
+			fi
+			uci commit batchupdate
+			;;
+		del)
+			if ! valid_name "${2:-}"; then
+				echo '{"error":"invalid package name"}'
+				return 1
+			fi
+			uci del_list batchupdate.main.blacklist="$2" 2>/dev/null
+			uci commit batchupdate
+			;;
+		list)
+			;;
+		*)
+			echo '{"error":"unknown blacklist action"}'
+			return 1
+			;;
+	esac
+
+	load_blacklist
+	local first=1 b
+	printf '['
+	for b in $BLACKLIST; do
+		[ "$first" = "0" ] && printf ','
+		first=0
+		printf '"%s"' "$b"
+	done
+	printf ']\n'
+}
+
+case "${1:-}" in
+	list)      cmd_list ;;
+	status)    cmd_status ;;
+	log)       [ -f "$LOGFILE" ] && tail -c 65536 "$LOGFILE"; true ;;
+	update)    cmd_update ;;
+	refresh)   cmd_start --refresh-only ;;
+	start)     shift; cmd_start "$@" ;;
+	run)       shift; cmd_run "$@" ;;
+	blacklist) shift; cmd_blacklist "$@" ;;
+	*)
+		echo "Usage: $SELF {list|status|log|update|refresh|start [pkg...]|blacklist [list|add pkg|del pkg]}" >&2
+		exit 1
+		;;
+esac
