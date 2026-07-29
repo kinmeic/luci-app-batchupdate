@@ -11,7 +11,7 @@ LUCI_DESCRIPTION:=One-click upgrade of all upgradable packages with a configurab
 LUCI_DEPENDS:=+luci-base
 LUCI_PKGARCH:=all
 
-PKG_LICENSE:=Apache-2.0
+PKG_LICENSE:=MIT
 
 include $(TOPDIR)/feeds/luci/luci.mk
 

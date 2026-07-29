@@ -121,4 +121,4 @@ LuCI JS 视图 (overview.js)
 
 ## License
 
-Apache-2.0
+MIT，详见 [LICENSE](LICENSE)。
