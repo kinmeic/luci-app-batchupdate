@@ -13,6 +13,12 @@ LUCI_PKGARCH:=all
 
 PKG_LICENSE:=MIT
 
+ifneq ($(strip $(BATCHUPDATE_VERSION)),)
+PKG_VERSION:=$(strip $(BATCHUPDATE_VERSION))
+PKG_PO_VERSION:=$(strip $(BATCHUPDATE_VERSION))
+PKG_RELEASE:=
+endif
+
 define Package/luci-app-batchupdate/conffiles
 /etc/config/batchupdate
 endef
