@@ -4,6 +4,7 @@
 'require ui';
 'require poll';
 'require dom';
+'require request';
 
 var BACKEND = '/usr/bin/batchupdate';
 var POLL_INTERVAL = 2;
@@ -54,6 +55,7 @@ return view.extend({
 		this.activeTab = 'upgrades';
 		this.activeTask = null;
 		this.expectedTotal = 0;
+		this.packageManager = data[1] && data[1].manager;
 		this.statusEl = E('div', { 'style': 'margin:.5em 0' });
 		this.pkgEl = E('div', { 'style': 'margin-top:1em' });
 		this.blEl = E('div', { 'style': 'margin-top:1em' });
@@ -77,13 +79,20 @@ return view.extend({
 			'class': 'btn cbi-button cbi-button-action',
 			'click': L.bind(this.handleUpgradeAll, this)
 		}, [ _('Upgrade all packages') ]);
+		this.manualInstallBtn = E('button', {
+			'class': 'btn cbi-button cbi-button-positive',
+			'disabled': !this.packageManager || this.packageManager === 'none' ? true : null,
+			'click': L.bind(this.showManualInstall, this)
+		}, [ _('Manual Install Package') ]);
 
 		this.upgradesTab = E('div', { 'class': 'cbi-section' }, [
 			this.statusEl,
 			E('div', {}, [
 				this.refreshBtn,
 				' ',
-				this.upgradeAllBtn
+				this.upgradeAllBtn,
+				' ',
+				this.manualInstallBtn
 			]),
 			this.pkgEl,
 			this.logEl
@@ -199,8 +208,11 @@ return view.extend({
 		}, text));
 
 		var busy = this.isBusy(st);
+		this.busy = busy;
 		this.refreshBtn.disabled = busy;
 		this.upgradeAllBtn.disabled = busy;
+		this.manualInstallBtn.disabled = busy || !this.packageManager ||
+			this.packageManager === 'none';
 
 		if (st.operation === 'refresh' || this.activeTask === 'refresh')
 			this.setRefreshLoading(busy);
@@ -277,6 +289,10 @@ return view.extend({
 
 	renderPackages: function(list) {
 		this.pkgList = list;
+		this.packageManager = list && list.manager;
+		if (this.manualInstallBtn)
+			this.manualInstallBtn.disabled = this.busy || !this.packageManager ||
+				this.packageManager === 'none';
 
 		if (!list) {
 			dom.content(this.pkgEl, E('div', { 'class': 'alert-message error' },
@@ -406,6 +422,200 @@ return view.extend({
 			L.bind(function() { this.startUpgrade([ name ], 1); }, this));
 	},
 
+	showManualInstall: function() {
+		var manager = this.packageManager;
+		if (manager !== 'opkg' && manager !== 'apk') {
+			this.reportError(new Error(_('No supported package manager (opkg or apk) was found on this system.')));
+			return;
+		}
+
+		var extension = manager === 'opkg' ? 'ipk' : 'apk';
+		var state = {
+			extension: extension,
+			path: '/tmp/batchupdate-upload.' + extension,
+			uploaded: false
+		};
+
+		state.fileNameEl = E('div', { 'style': 'margin-top:.5em' }, [
+			E('em', {}, _('No package file selected.'))
+		]);
+		state.progressEl = E('progress', {
+			'class': 'batchupdate-progress',
+			'max': 100,
+			'value': 0,
+			'style': 'display:none;margin-top:.65em'
+		});
+		state.resultEl = E('div', { 'style': 'margin-top:.75em' });
+		state.fileInput = E('input', {
+			'type': 'file',
+			'accept': '.' + extension,
+			'style': 'display:none',
+			'change': L.bind(this.handleManualFileSelected, this, state)
+		});
+		state.uploadBtn = E('button', {
+			'class': 'btn cbi-button',
+			'click': function() { state.fileInput.click(); }
+		}, [ _('Upload package…') ]);
+
+		state.options = [
+			'--force-reinstall',
+			'--force-downgrade',
+			'--force-space'
+		].map(function(option) {
+			var input = E('input', { 'type': 'checkbox', 'value': option });
+			return {
+				name: option,
+				input: input,
+				node: E('label', {
+					'class': 'cbi-checkbox',
+					'style': 'display:block;margin:.4em 0'
+				}, [ input, ' ', option ])
+			};
+		});
+
+		state.installBtn = E('button', {
+			'class': 'btn cbi-button-action',
+			'disabled': true,
+			'click': L.bind(this.handleManualInstall, this, state)
+		}, [ _('Install') ]);
+		state.cancelBtn = E('button', {
+			'class': 'btn',
+			'click': L.bind(this.handleManualInstallCancel, this, state)
+		}, [ _('Cancel') ]);
+
+		/* Remove a stale upload left behind by an interrupted browser session. */
+		fs.remove(state.path).catch(function() {});
+
+		ui.showModal(_('Manual package installation'), [
+			E('div', { 'class': 'alert-message warning' },
+				_('Installing packages from untrusted sources can damage your system. Only install packages you trust.')),
+			E('p', {}, _('Only .%s package files are accepted on this system.').format(extension)),
+			E('div', {}, [ state.fileInput, state.uploadBtn ]),
+			state.fileNameEl,
+			state.progressEl,
+			E('h4', { 'style': 'margin-bottom:.35em' }, _('Install options')),
+			E('div', {}, state.options.map(function(option) { return option.node; })),
+			state.resultEl,
+			E('div', { 'class': 'right', 'style': 'margin-top:1em' }, [
+				state.cancelBtn,
+				' ',
+				state.installBtn
+			])
+		]);
+	},
+
+	handleManualFileSelected: function(state, ev) {
+		var file = ev.target.files && ev.target.files[0];
+		if (!file)
+			return;
+
+		var suffix = '.' + state.extension;
+		if (file.name.toLowerCase().slice(-suffix.length) !== suffix) {
+			ev.target.value = '';
+			state.uploaded = false;
+			state.installBtn.disabled = true;
+			dom.content(state.resultEl, E('div', { 'class': 'alert-message error' },
+				_('The selected file must have the .%s extension.').format(state.extension)));
+			return;
+		}
+
+		state.uploaded = false;
+		state.installBtn.disabled = true;
+		state.uploadBtn.disabled = true;
+		state.cancelBtn.disabled = true;
+		state.progressEl.style.display = '';
+		state.progressEl.value = 0;
+		dom.content(state.uploadBtn, [ _('Uploading…') ]);
+		dom.content(state.fileNameEl, [ file.name ]);
+		dom.content(state.resultEl, '');
+
+		var data = new FormData();
+		data.append('sessionid', L.env.sessionid);
+		data.append('filename', state.path);
+		data.append('filedata', file);
+
+		return request.post(L.env.cgi_base + '/cgi-upload', data, {
+			timeout: 0,
+			progress: function(pev) {
+				if (pev.total)
+					state.progressEl.value = (pev.loaded / pev.total) * 100;
+			}
+		}).then(L.bind(function(state, file, res) {
+			var reply = res.json();
+			if (reply && reply.failure)
+				throw new Error(reply.message || reply.failure);
+
+			state.uploaded = true;
+			state.progressEl.value = 100;
+			state.installBtn.disabled = false;
+			dom.content(state.fileNameEl,
+				_('Package uploaded: %s').format(file.name));
+		}, this, state, file)).catch(L.bind(function(state, err) {
+			state.fileInput.value = '';
+			state.progressEl.style.display = 'none';
+			dom.content(state.resultEl, E('div', { 'class': 'alert-message error' },
+				_('Upload failed: %s').format(err.message || String(err))));
+		}, this, state)).then(function() {
+			state.uploadBtn.disabled = false;
+			state.cancelBtn.disabled = false;
+			dom.content(state.uploadBtn, [ _('Upload package…') ]);
+		});
+	},
+
+	handleManualInstall: function(state) {
+		if (!state.uploaded)
+			return;
+
+		var options = state.options.filter(function(option) {
+			return option.input.checked;
+		}).map(function(option) {
+			return option.name;
+		});
+
+		state.fileInput.disabled = true;
+		state.uploadBtn.disabled = true;
+		state.installBtn.disabled = true;
+		state.cancelBtn.disabled = true;
+		state.options.forEach(function(option) { option.input.disabled = true; });
+		dom.content(state.resultEl,
+			E('p', { 'class': 'spinning' }, _('Installing package…')));
+
+		return fs.exec(BACKEND, [ 'install' ].concat(options)).then(
+			L.bind(function(state, res) {
+				var output = [ res.stdout || '', res.stderr || '' ]
+					.map(function(text) { return text.trim(); })
+					.filter(function(text) { return text; })
+					.join('\n');
+				var succeeded = res.code === 0;
+				var message = succeeded
+					? _('Installation succeeded.')
+					: _('Installation failed (exit code %d).').format(res.code);
+
+				dom.content(state.resultEl, [
+					E('div', { 'class': 'alert-message ' + (succeeded ? 'success' : 'error') }, message),
+					E('pre', { 'class': 'batchupdate-modal-log' }, output || _('No output was returned.'))
+				]);
+
+				if (succeeded)
+					this.refreshPackages();
+			}, this, state),
+			L.bind(function(state, err) {
+				dom.content(state.resultEl, E('div', { 'class': 'alert-message error' },
+					_('Installation failed: %s').format(err.message || String(err))));
+			}, this, state)
+		).then(L.bind(function(state) {
+			state.uploaded = false;
+			state.cancelBtn.disabled = false;
+			dom.content(state.cancelBtn, [ _('Close') ]);
+			fs.remove(state.path).catch(function() {});
+		}, this, state));
+	},
+
+	handleManualInstallCancel: function(state) {
+		ui.hideModal();
+		fs.remove(state.path).catch(function() {});
+	},
+
 	startUpgrade: function(pkgs, expectedTotal) {
 		this.activeTask = 'upgrade';
 		this.expectedTotal = expectedTotal || 0;
@@ -444,10 +654,10 @@ return view.extend({
 	},
 
 	startPolling: function() {
-		poll.stop();
-		poll.add(L.bind(function() {
+		this.stopPolling();
+		this.pollFn = L.bind(function() {
 			if (!this.logEl.isConnected) {
-				poll.stop();
+				this.stopPolling();
 				return Promise.resolve();
 			}
 
@@ -462,7 +672,7 @@ return view.extend({
 				this.updateLog(res[1]);
 
 				if (!this.isBusy(st)) {
-					poll.stop();
+					this.stopPolling();
 					this.activeTask = null;
 
 					if (operation === 'refresh' && st.status === 'idle') {
@@ -479,7 +689,17 @@ return view.extend({
 							_('Connection interrupted; retrying…')));
 				return Promise.resolve(err);
 			}, this));
-		}, this), POLL_INTERVAL);
+		}, this);
+
+		poll.add(this.pollFn, POLL_INTERVAL);
+		poll.start();
+	},
+
+	stopPolling: function() {
+		if (this.pollFn) {
+			poll.remove(this.pollFn);
+			this.pollFn = null;
+		}
 	},
 
 	updateLog: function(text) {

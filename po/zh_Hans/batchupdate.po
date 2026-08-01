@@ -52,14 +52,47 @@ msgstr "已完成"
 msgid "Idle"
 msgstr "空闲"
 
+msgid "Install"
+msgstr "安装"
+
+msgid "Install options"
+msgstr "安装参数"
+
+msgid "Installation failed (exit code %d)."
+msgstr "安装失败（退出码 %d）。"
+
+msgid "Installation failed: %s"
+msgstr "安装失败：%s"
+
+msgid "Installation succeeded."
+msgstr "安装成功。"
+
+msgid "Installing package…"
+msgstr "正在安装软件包…"
+
+msgid "Installing packages from untrusted sources can damage your system. Only install packages you trust."
+msgstr "安装来自不受信任来源的软件包可能损坏系统。请只安装您信任的软件包。"
+
 msgid "Installed version"
 msgstr "当前版本"
+
+msgid "Manual Install Package"
+msgstr "手动安装软件包"
+
+msgid "Manual package installation"
+msgstr "手动安装软件包"
 
 msgid "No supported package manager (opkg or apk) was found on this system."
 msgstr "未在此系统上找到受支持的包管理器（opkg 或 apk）。"
 
 msgid "No upgradable packages found."
 msgstr "没有可更新的软件包。"
+
+msgid "No output was returned."
+msgstr "安装命令没有返回输出。"
+
+msgid "No package file selected."
+msgstr "尚未选择软件包文件。"
 
 msgid "None"
 msgstr "无"
@@ -78,6 +111,9 @@ msgstr "软件包升级"
 
 msgid "Package upgrade progress"
 msgstr "软件包升级进度"
+
+msgid "Package uploaded: %s"
+msgstr "软件包已上传：%s"
 
 msgid ""
 "Packages on the blacklist are never upgraded, neither by one-click batch "
@@ -98,6 +134,9 @@ msgstr "正在刷新"
 msgid "Remove from blacklist"
 msgstr "移出黑名单"
 
+msgid "Only .%s package files are accepted on this system."
+msgstr "此系统只接受 .%s 软件包文件。"
+
 msgid "Status"
 msgstr "状态"
 
@@ -115,6 +154,9 @@ msgstr "黑名单为空。"
 msgid "There is nothing to upgrade."
 msgstr "没有需要升级的软件包。"
 
+msgid "The selected file must have the .%s extension."
+msgstr "所选文件必须使用 .%s 扩展名。"
+
 msgid "This will upgrade %d packages. Blacklisted packages are skipped. Continue?"
 msgstr "即将升级 %d 个软件包，黑名单中的软件包会被跳过。是否继续？"
 
@@ -131,6 +173,15 @@ msgstr "一键升级所有可更新的软件包。黑名单中的软件包会被
 
 msgid "Upgrade package \"%s\"?"
 msgstr "确定要升级软件包“%s”吗？"
+
+msgid "Upload failed: %s"
+msgstr "上传失败：%s"
+
+msgid "Upload package…"
+msgstr "上传软件包…"
+
+msgid "Uploading…"
+msgstr "正在上传…"
 
 msgid "Upgraded: %d, failed: %d, skipped: %d"
 msgstr "已升级：%d，失败：%d，跳过：%d"

@@ -8,6 +8,7 @@
 #   batchupdate update                    refresh package lists, synchronously
 #   batchupdate refresh                   refresh package lists, in background
 #   batchupdate start [pkg ...]           background upgrade (all upgradable, or given pkgs)
+#   batchupdate install [option ...]       install the uploaded package from /tmp
 #   batchupdate blacklist [list]          JSON array of blacklisted packages
 #   batchupdate blacklist add <pkg>       add package to blacklist
 #   batchupdate blacklist del <pkg>       remove package from blacklist
@@ -101,6 +102,58 @@ upgrade_one() {
 		opkg) opkg upgrade "$@" ;;
 		apk)  apk upgrade "$@" ;;
 		*)    return 1 ;;
+	esac
+}
+
+cmd_install() {
+	local pm extension package option pid
+
+	pm=$(pkg_manager)
+	case "$pm" in
+		opkg) extension="ipk" ;;
+		apk)  extension="apk" ;;
+		*)
+			echo "No supported package manager (opkg or apk) found."
+			return 1
+			;;
+	esac
+
+	package="/tmp/batchupdate-upload.$extension"
+	if [ ! -f "$package" ] || [ -L "$package" ]; then
+		echo "Uploaded .$extension package not found."
+		return 1
+	fi
+
+	for option in "$@"; do
+		case "$option" in
+			--force-reinstall|--force-downgrade|--force-space) ;;
+			*)
+				echo "Unsupported install option: $option"
+				return 1
+				;;
+		esac
+	done
+
+	if [ -d "$LOCKDIR" ]; then
+		pid=$(cat "$PIDFILE" 2>/dev/null)
+		if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+			echo "Another package operation is already running."
+			return 1
+		fi
+		rm -rf "$LOCKDIR"
+	fi
+
+	mkdir -p "$WORKDIR"
+	if ! mkdir "$LOCKDIR" 2>/dev/null; then
+		echo "Failed to acquire the package operation lock."
+		return 1
+	fi
+	echo $$ > "$PIDFILE"
+	trap 'rm -rf "$LOCKDIR"' EXIT
+
+	case "$pm" in
+		opkg) opkg install "$@" "$package" 2>&1 ;;
+		apk)  apk add "$@" "$package" 2>&1 ;;
 	esac
 }
 
@@ -375,10 +428,11 @@ case "${1:-}" in
 	update)    cmd_update ;;
 	refresh)   cmd_start --refresh-only ;;
 	start)     shift; cmd_start "$@" ;;
+	install)   shift; cmd_install "$@" ;;
 	run)       shift; cmd_run "$@" ;;
 	blacklist) shift; cmd_blacklist "$@" ;;
 	*)
-		echo "Usage: $SELF {list|status|log|update|refresh|start [pkg...]|blacklist [list|add pkg|del pkg]}" >&2
+		echo "Usage: $SELF {list|status|log|update|refresh|start [pkg...]|install [option...]|blacklist [list|add pkg|del pkg]}" >&2
 		exit 1
 		;;
 esac

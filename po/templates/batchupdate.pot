@@ -52,13 +52,46 @@ msgstr ""
 msgid "Idle"
 msgstr ""
 
+msgid "Install"
+msgstr ""
+
+msgid "Install options"
+msgstr ""
+
+msgid "Installation failed (exit code %d)."
+msgstr ""
+
+msgid "Installation failed: %s"
+msgstr ""
+
+msgid "Installation succeeded."
+msgstr ""
+
+msgid "Installing package…"
+msgstr ""
+
+msgid "Installing packages from untrusted sources can damage your system. Only install packages you trust."
+msgstr ""
+
 msgid "Installed version"
+msgstr ""
+
+msgid "Manual Install Package"
+msgstr ""
+
+msgid "Manual package installation"
 msgstr ""
 
 msgid "No supported package manager (opkg or apk) was found on this system."
 msgstr ""
 
 msgid "No upgradable packages found."
+msgstr ""
+
+msgid "No output was returned."
+msgstr ""
+
+msgid "No package file selected."
 msgstr ""
 
 msgid "None"
@@ -79,6 +112,9 @@ msgstr ""
 msgid "Package upgrade progress"
 msgstr ""
 
+msgid "Package uploaded: %s"
+msgstr ""
+
 msgid ""
 "Packages on the blacklist are never upgraded, neither by one-click batch "
 "upgrades nor by single package upgrades."
@@ -94,6 +130,9 @@ msgid "Refreshing"
 msgstr ""
 
 msgid "Remove from blacklist"
+msgstr ""
+
+msgid "Only .%s package files are accepted on this system."
 msgstr ""
 
 msgid "Status"
@@ -113,6 +152,9 @@ msgstr ""
 msgid "There is nothing to upgrade."
 msgstr ""
 
+msgid "The selected file must have the .%s extension."
+msgstr ""
+
 msgid "This will upgrade %d packages. Blacklisted packages are skipped. Continue?"
 msgstr ""
 
@@ -128,6 +170,15 @@ msgid ""
 msgstr ""
 
 msgid "Upgrade package \"%s\"?"
+msgstr ""
+
+msgid "Upload failed: %s"
+msgstr ""
+
+msgid "Upload package…"
+msgstr ""
+
+msgid "Uploading…"
 msgstr ""
 
 msgid "Upgraded: %d, failed: %d, skipped: %d"

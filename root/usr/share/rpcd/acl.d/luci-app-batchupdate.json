@@ -3,6 +3,8 @@
 		"description": "Grant access to luci-app-batchupdate",
 		"write": {
 			"file": {
+				"/tmp/batchupdate-upload.ipk": [ "write" ],
+				"/tmp/batchupdate-upload.apk": [ "write" ],
 				"/usr/bin/batchupdate list": [ "exec" ],
 				"/usr/bin/batchupdate status": [ "exec" ],
 				"/usr/bin/batchupdate log": [ "exec" ],
@@ -10,12 +12,14 @@
 				"/usr/bin/batchupdate refresh": [ "exec" ],
 				"/usr/bin/batchupdate start": [ "exec" ],
 				"/usr/bin/batchupdate start *": [ "exec" ],
+				"/usr/bin/batchupdate install": [ "exec" ],
+				"/usr/bin/batchupdate install *": [ "exec" ],
 				"/usr/bin/batchupdate blacklist list": [ "exec" ],
 				"/usr/bin/batchupdate blacklist add *": [ "exec" ],
 				"/usr/bin/batchupdate blacklist del *": [ "exec" ]
 			},
 			"ubus": {
-				"file": [ "exec" ]
+				"file": [ "exec", "remove" ]
 			}
 		}
 	}
